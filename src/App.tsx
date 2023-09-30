@@ -233,6 +233,7 @@ const Content: FC = () => {
                                 </li>
                                 <li className="supply-item">
                                     <button>Repay</button>
+                                    <button>token</button>
                                 </li>
                             </ul>
                         </li>
