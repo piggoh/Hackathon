@@ -34,11 +34,29 @@ import {
     Keypair,
     LAMPORTS_PER_SOL,
     PublicKey,
+    Connection,
 } from "@solana/web3.js";
-import React, { FC, ReactNode, useMemo, useCallback, useState } from "react";
-
-import { actions, utils, programs, NodeWallet, Connection } from "@metaplex/js";
-
+import React, {
+    FC,
+    ReactNode,
+    useMemo,
+    useCallback,
+    useState,
+    useEffect,
+} from "react";
+import { actions, utils, programs, NodeWallet } from "@metaplex/js"; //Connection
+import {
+    Token,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+    AccountInfo,
+} from "@solana/spl-token";
+import {
+    Metaplex,
+    keypairIdentity,
+    bundlrStorage,
+} from "@metaplex-foundation/js";
+import expect from "expect";
 require("./App.css");
 require("@solana/wallet-adapter-react-ui/styles.css");
 let thelamports = 0;
@@ -56,7 +74,7 @@ export default App;
 
 const Context: FC<{ children: ReactNode }> = ({ children }) => {
     // The network can be set to 'devnet', 'testnet', or 'mainnet-beta'.
-    const network = WalletAdapterNetwork.Mainnet;
+    const network = WalletAdapterNetwork.Devnet;
 
     // You can also provide a custom RPC endpoint.
     const endpoint = useMemo(() => clusterApiUrl(network), [network]);
@@ -88,48 +106,136 @@ const Context: FC<{ children: ReactNode }> = ({ children }) => {
 };
 
 const Content: FC = () => {
-    let [lamports, setLamports] = useState(0.1);
-    let [wallet, setWallet] = useState(
-        "9m5kFDqgpf7Ckzbox91RYcADqcmvxW4MmuNvroD5H2r9"
-    );
+    const { publicKey, connected, connect, disconnect } = useWallet();
+    const [balance, setBalance] = useState<number | null>(null);
+    const [nfts, setNFTs] = useState<any[]>([]);
+    const [additionalData, setAdditionalData] = useState<any[]>([]);
 
-    // const { connection } = useConnection();
-    const connection = new Connection(clusterApiUrl("devnet"));
-    const { publicKey, sendTransaction } = useWallet();
+    // const connection = new Connection("https://api.devnet.solana.com");
+    // const metaplex = Metaplex.make(connection);
+    const memoizedConnection = useMemo(() => {
+        return new Connection("https://api.devnet.solana.com");
+    }, []);
 
-    const onClick = useCallback(async () => {
-        if (!publicKey) throw new WalletNotConnectedError();
-        connection.getBalance(publicKey).then((bal) => {
-            console.log(bal / LAMPORTS_PER_SOL);
-        });
+    // Memoize the Metaplex instance
+    const metaplex = useMemo(() => {
+        return Metaplex.make(memoizedConnection);
+    }, [memoizedConnection]);
 
-        let lamportsI = LAMPORTS_PER_SOL * lamports;
-        console.log(publicKey.toBase58());
-        console.log("lamports sending: {}", thelamports);
-        const transaction = new Transaction().add(
-            SystemProgram.transfer({
-                fromPubkey: publicKey,
-                toPubkey: new PublicKey(theWallet),
-                lamports: lamportsI,
-            })
-        );
+    useEffect(() => {
+        // Fetch the wallet balance when the publicKey changes (wallet connects)
+        const fetchData = async () => {
+            try {
+                if (publicKey) {
+                    const balance = await memoizedConnection.getBalance(
+                        publicKey
+                    );
+                    // Convert balance from lamports to SOL
+                    const solBalance = balance / LAMPORTS_PER_SOL;
+                    setBalance(solBalance);
 
-        const signature = await sendTransaction(transaction, connection);
+                    const owner = publicKey;
+                    const allNFTs = await metaplex
+                        .nfts()
+                        .findAllByOwner({ owner });
+                    // Set the NFTs state only once with initial data
+                    if (nfts.length === 0) {
+                        setNFTs(allNFTs);
+                    }
 
-        await connection.confirmTransaction(signature, "processed");
-    }, [publicKey, sendTransaction, connection]);
+                    // Fetch additional data only if additionalData is empty
+                    if (additionalData.length === 0) {
+                        fetchMetadata(allNFTs);
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching data:", error);
+            }
+        };
 
-    function setTheLamports(e: any) {
-        console.log(Number(e.target.value));
-        setLamports(Number(e.target.value));
-        lamports = e.target.value;
-        thelamports = lamports;
-    }
-    function setTheWallet(e: any) {
-        setWallet(e.target.value);
-        theWallet = e.target.value;
-    }
+        const fetchMetadata = async (nfts: any[]) => {
+            const nftCache: Record<string, any> = {};
+            const newData: any[] = [];
 
+            for (const nft of nfts) {
+                try {
+                    const nftName = nft.name; // Convert NFT ID to a string
+
+                    if (nftCache[nftName]) {
+                        // Data is already in cache, use it
+                        newData.push(nftCache[nftName]);
+                    } else {
+                        const response = await fetch(nft.uri);
+                        if (response.ok) {
+                            const data = await response.json();
+                            newData.push(data);
+
+                            // Cache the fetched data
+                            nftCache[nftName] = data;
+                        } else {
+                            console.error(
+                                `Failed to fetch data from ${nft.uri}`
+                            );
+                        }
+                    }
+                } catch (error) {
+                    console.error(
+                        `Error fetching data from ${nft.uri}: ${error}`
+                    );
+                }
+            }
+
+            // Update the state with the fetched data
+            setAdditionalData(newData);
+        };
+
+        if (connected && publicKey) {
+            fetchData(); // Fetch data only when connected, publicKey is available, and additionalData is empty
+        }
+    }, [connected, publicKey, nfts, memoizedConnection, additionalData]);
+
+    const renderNFTs = () => {
+        if (nfts.length === 0) {
+            return <p>No NFTs found.</p>;
+        }
+
+        return additionalData.map((nft, index) => (
+            
+            <div key={index}>
+                <div className="breaker"></div>
+                <ul className="supply-list">
+                    <li className="supply-item">
+                        <h5>Assets</h5>
+                        <img
+                            className="nft-image"
+                            src={nft.image}
+                            alt={""}
+                        />
+                        <h6>{nft.name}</h6>
+                    </li>
+                    <li className="supply-item">
+                        <h5>Amount</h5>
+                        <h6>20.5151 SOL($453.00)</h6>
+                        <div className="blank"></div>
+                        
+                        
+                    </li>
+                    <li className="supply-item">
+                        <h5>APY</h5>
+                        <h6>2.35%</h6>
+                        <div className="blank"></div>
+                        
+                    </li>
+                    <li className="supply-item">
+                        <button>Repay</button>
+                    </li>
+                </ul>
+                
+            </div>
+        ));
+    };
+    console.log("NFTS", nfts);
+    console.log("METADATA", additionalData);
     return (
         <div className="App">
             <div className="navbar">
@@ -171,75 +277,111 @@ const Content: FC = () => {
             </div>
             <hr />
             <br></br>
-            <div className="bottombar">
-                <div className="btmbar-header">
-                    <ul className="btmbar-list">
-                        <li className="btmbar-item">
-                            <h3>Your Supplies:</h3>
-                            <ul className="supply-list">
-                                <li className="supply-item">
-                                    <h6>Assets</h6>
-                                    <h6> token name</h6>
-                                </li>
-                                <li className="supply-item">
-                                    <h6>Amount Supply</h6>
-                                    <h6>20.5151 ($453.00)</h6>
-                                </li>
-                                <li className="supply-item">
-                                    <h6>APY</h6>
-                                    <h6>2.35%</h6>
-                                </li>
-                                <li className="supply-item">
-                                    <button>Withdraw</button>
-                                </li>
-                            </ul>
-                        </li>
+            <div></div>
+            <div>
+                {!connected ? (
+                    <div>
+                        <p>Wallet not connected</p>
+                    </div>
+                ) : (
+                    <div>
+                        <p>Wallet connected</p>
+                        {balance !== null && (
+                            <p>Wallet Balance: {balance.toFixed(5)} SOL</p>
+                        )}
 
-                        <li className="btmbar-item">
-                            <h3>Asset to Supply:</h3>
-                            <ul className="supply-list">
-                                <li className="supply-item">
-                                    <h6>Assets</h6>
-                                    <h6> token name</h6>
-                                </li>
-                                <li className="supply-item">
-                                    <h6>Amount Supply</h6>
-                                    <h6>20.5151 ($453.00)</h6>
-                                </li>
-                                <li className="supply-item">
-                                    <h6>APY</h6>
-                                    <h6>2.35%</h6>
-                                </li>
-                                <li className="supply-item">
-                                    <button>Withdraw</button>
-                                </li>
-                            </ul>
-                        </li>
-
-                        <li className="btmbar-item">
-                            <h3>Your Borrows:</h3>
-                            <ul className="supply-list">
-                                <li className="supply-item">
-                                    <h6>Assets</h6>
-                                    <h6> token name</h6>
-                                </li>
-                                <li className="supply-item">
-                                    <h6>Amount Borrowed</h6>
-                                    <h6>20.5151 ($453.00)</h6>
-                                </li>
-                                <li className="supply-item">
-                                    <h6>APY</h6>
-                                    <h6>2.35%</h6>
-                                </li>
-                                <li className="supply-item">
-                                    <button>Repay</button>
-                                    <button>token</button>
-                                </li>
-                            </ul>
-                        </li>
-                    </ul>
-                </div>
+                        {renderNFTs()}
+                    </div>
+                )}
             </div>
+            {connected && (
+                <div className="bottombar">
+                    <div className="row">
+                        <div className="column">
+                            <ul className="btmbar-list">
+                                <li className="btmbar-item">
+                                    <h3>Your Supplies:</h3>
+                                    <ul className="supply-list">
+                                        <li className="supply-item">
+                                            <h5>Assets</h5>
+                                            <h6> token name</h6>
+                                        </li>
+                                        <li className="supply-item">
+                                            <h5>Amount Supply</h5>
+                                            <h6>20.5151 ($453.00)</h6>
+                                        </li>
+                                        <li className="supply-item">
+                                            <h5>APY</h5>
+                                            <h6>2.35%</h6>
+                                        </li>
+                                        <li className="supply-item">
+                                            <button>Withdraw</button>
+                                        </li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </div>
+                        <div className="column">
+                            <ul className="btmbar-list">
+                                <li className="btmbar-item">
+                                    <h3>Your Borrows:</h3>
+                                    <ul className="supply-list">
+                                        <li className="supply-item">
+                                            <h5>Assets</h5>
+                                            <h6> token name</h6>
+                                        </li>
+                                        <li className="supply-item">
+                                            <h5>Amount Borrowed</h5>
+                                            <h6>20.5151 ($453.00)</h6>
+                                        </li>
+                                        <li className="supply-item">
+                                            <h5>APY</h5>
+                                            <h6>2.35%</h6>
+                                        </li>
+                                        <li className="supply-item">
+                                            <button>Repay</button>
+                                        </li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div className="row">
+                        <div className="column">
+                            <ul className="btmbar-list">
+                                <li className="btmbar-item">
+                                    <h3>Asset to Supply:</h3>
+                                    <ul className="supply-list">
+                                        <li className="supply-item">
+                                            <h5>Assets</h5>
+                                            <h6> token name</h6>
+                                        </li>
+                                        <li className="supply-item">
+                                            <h5>Amount Supply</h5>
+                                            <h6>20.5151 ($453.00)</h6>
+                                        </li>
+                                        <li className="supply-item">
+                                            <h5>APY</h5>
+                                            <h6>2.35%</h6>
+                                        </li>
+                                        <li className="supply-item">
+                                            <button>Supply</button>
+                                        </li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </div>
+                        <div className="column">
+                            <ul className="btmbar-list">
+                                <li className="btmbar-item">
+                                    <h3>Assets to borrow:</h3>
+                                    {renderNFTs()}
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -11,3 +11,112 @@
   text-align: center !important;
   align-items: center !important;
 }
+
+body {
+  background: #f0ebeb;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+      "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
+      "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+      monospace;
+}
+
+a {
+  color: #000;
+}
+
+.breaker {
+  border: 1px solid rgb(226, 207, 192);
+}
+
+.headerbar-list {
+  background-color: #f0eded;
+
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.headerbar-item {
+  border: 1px solid #000;
+  border-radius: 15px;
+  flex: 1;
+  text-align: center;
+  margin-left: 25px;
+  margin-right: 25px;
+}
+
+.bottombar {
+  padding-left: 20%;
+  padding-right: 20%;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.column {
+  border-radius: 15px;
+  flex: auto;
+  max-width: calc(50% - 20px);
+  background-color: #ffffff;
+}
+
+.btmbar-list {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+}
+
+.btmbar-item {
+  text-align: left;
+}
+
+.supply-list {
+
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  list-style: none;
+}
+
+.supply-item {
+  text-align: left;
+  margin-right: 20px;
+}
+
+.supply-item h5 {
+vertical-align: top;
+}
+.blank {
+
+  height: 50px;
+}
+.supply-item button {
+  padding: 3px 15px;
+  background-color: #b48e6c;
+  color: #fff;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+button:hover {
+  background-color: #813415;
+}
+
+.nft-image {
+  border: #000 solid 1px;
+  border-radius: 15%;
+  width: 50px;
+  height: 50px;
+}
